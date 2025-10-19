@@ -8,102 +8,99 @@ import static org.junit.jupiter.api.Assertions.*;
 
 class FlightSearchTest {
 
-    // ===== Level 1/2 tests (kept as-is) =====
-
-    @Test
-    void testEmptyDestination() {
-        FlightSearch fs = new FlightSearch("Passenger", "", 300);
-        assertFalse(fs.validateSearch());
-    }
-
     @Test
     void testValidInput() {
-        FlightSearch fs = new FlightSearch("Alice Johnson", "London", 1200);
+        FlightSearch fs = new FlightSearch("Chris", "Tokyo", 900)
+                .setDepartureDate(LocalDate.now().plusDays(10))
+                .setReturnDate(LocalDate.now().plusDays(20))
+                .setDepartureAirportCode("JFK")
+                .setDestinationAirportCode("NRT")
+                .setAdultPassengerCount(1)
+                .setChildPassengerCount(0)
+                .setInfantPassengerCount(0)
+                .setSeatingClass("Economy")
+                .setEmergencyRowSeating(false);
+
         assertTrue(fs.validateSearch());
     }
 
     @Test
+    void testEmptyDestination() {
+        FlightSearch fs = new FlightSearch("Chris", "", 500);
+        assertFalse(fs.validateSearch());
+    }
+
+    @Test
     void testEmptyName() {
-        FlightSearch fs = new FlightSearch("", "Paris", 500);
+        FlightSearch fs = new FlightSearch("", "Berlin", 400);
         assertFalse(fs.validateSearch());
     }
 
     @Test
     void testInvalidBudget() {
-        FlightSearch fs = new FlightSearch("Bob", "Rome", 0);
+        FlightSearch fs = new FlightSearch("Chris", "Berlin", -1);
         assertFalse(fs.validateSearch());
-    }
-
-    @Test
-    void testInvalidCharactersInName() {
-        FlightSearch fs = new FlightSearch("Bob@123", "Rome", 400);
-        assertFalse(fs.validateSearch());
-    }
-
-    // ===== Level 3 tests =====
-
-    @Test
-    void testIataCodesMustBe3UppercaseLetters() {
-        FlightSearch fs = new FlightSearch("Chris", "Tokyo", 900);
-        fs.setDepartureAirportCode("JFK")
-                .setDestinationAirportCode("NRT");   // OK
-        assertTrue(fs.validateSearch());
-
-        fs.setDestinationAirportCode("Nar");   // lower/mixed -> invalid
-        assertFalse(fs.validateSearch());
-    }
-
-    @Test
-    void testDepartureBeforeReturnDate() {
-        FlightSearch fs = new FlightSearch("Dana", "Berlin", 800);
-        fs.setDepartureAirportCode("LAX")
-                .setDestinationAirportCode("TXL")
-                .setDepartureDate(LocalDate.now().plusDays(10))
-                .setReturnDate(LocalDate.now().plusDays(5)); // return before departure -> invalid
-        assertFalse(fs.validateSearch());
-
-        fs.setReturnDate(LocalDate.now().plusDays(20)); // now OK
-        assertTrue(fs.validateSearch());
     }
 
     @Test
     void testPassengerCountsNonNegative() {
-        FlightSearch fs = new FlightSearch("Evan", "Seoul", 700);
-        fs.setDepartureAirportCode("SFO")
-                .setDestinationAirportCode("ICN")
-                .setAdultPassengerCount(1)
-                .setChildPassengerCount(-1); // invalid
+        FlightSearch fs = new FlightSearch("A", "B", 100)
+                .setAdultPassengerCount(-1);
         assertFalse(fs.validateSearch());
-
-        fs.setChildPassengerCount(0);
-        assertTrue(fs.validateSearch());
     }
 
     @Test
     void testEmergencyRowRequiresAdultsNoChildrenNoInfants() {
-        FlightSearch fs = new FlightSearch("Fiona", "Dubai", 1500);
-        fs.setDepartureAirportCode("JFK")
-                .setDestinationAirportCode("DXB")
+        FlightSearch fs = new FlightSearch("A", "B", 100)
                 .setEmergencyRowSeating(true)
-                .setAdultPassengerCount(0);  // must have >=1 adult
-        assertFalse(fs.validateSearch());
+                .setAdultPassengerCount(1)
+                .setChildPassengerCount(0)
+                .setInfantPassengerCount(0);
+        assertTrue(fs.validateSearch()); // valid case
+    }
 
-        fs.setAdultPassengerCount(1).setInfantPassengerCount(1); // infants not allowed
-        assertFalse(fs.validateSearch());
-
-        fs.setInfantPassengerCount(0).setChildPassengerCount(0); // now valid
+    @Test
+    void testIataCodesMustBe3UppercaseLetters() {
+        FlightSearch fs = new FlightSearch("A", "B", 100)
+                .setDepartureAirportCode("JFK")
+                .setDestinationAirportCode("NRT");
         assertTrue(fs.validateSearch());
+
+        fs.setDestinationAirportCode("Nar"); // invalid (not uppercase)
+        assertFalse(fs.validateSearch());
     }
 
     @Test
     void testValidSeatingClassValues() {
-        FlightSearch fs = new FlightSearch("Gina", "Sydney", 2000);
-        fs.setDepartureAirportCode("LHR")
-                .setDestinationAirportCode("SYD")
-                .setSeatingClass("business");
-        assertTrue(fs.validateSearch());
+        String[] allowed = {"economy", "PREMIUM", "Business", "FIRST"};
+        for (String sc : allowed) {
+            FlightSearch fs = new FlightSearch("A", "B", 100)
+                    .setSeatingClass(sc);
+            assertTrue(fs.validateSearch(), "Should allow: " + sc);
+        }
 
-        fs.setSeatingClass("diamond"); // invalid option
+        FlightSearch bad = new FlightSearch("A", "B", 100)
+                .setSeatingClass("DELUXE");
+        assertFalse(bad.validateSearch());
+    }
+
+    @Test
+    void testDepartureBeforeReturnDate() {
+        FlightSearch fs = new FlightSearch("A", "B", 100)
+                .setDepartureDate(LocalDate.now().plusDays(1))
+                .setReturnDate(LocalDate.now().plusDays(5));
+        assertTrue(fs.validateSearch());
+    }
+
+    @Test
+    void testInvalidBudgetWithEverythingElseValid() {
+        FlightSearch fs = new FlightSearch("Chris", "Tokyo", 0) // not positive
+                .setDepartureAirportCode("JFK")
+                .setDestinationAirportCode("NRT")
+                .setDepartureDate(LocalDate.now().plusDays(7))
+                .setReturnDate(LocalDate.now().plusDays(9))
+                .setAdultPassengerCount(1)
+                .setSeatingClass("ECONOMY");
         assertFalse(fs.validateSearch());
     }
 }

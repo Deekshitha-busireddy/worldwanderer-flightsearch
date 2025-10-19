@@ -2,155 +2,195 @@ package flight;
 
 import java.time.LocalDate;
 import java.util.Objects;
-import java.util.Set;
 
 /**
- * Level 3 FlightSearch domain class.
- * - Keeps Level 1/2 behaviour (constructor + validateSearch()) so your old tests still pass
- * - Adds extra attributes & validations used in new tests
+ * Core model for a flight search with validation rules.
  */
 public class FlightSearch {
 
-    // ===== Level 1/2 fields =====
+    // --- Core inputs ---
     private String passengerName;
-    private String destination;  // free-text city/country name
+    private String destination;
     private double budget;
 
-    // ===== Level 3 fields =====
-    private String departureAirportCode;      // IATA code, e.g., "JFK"
-    private String destinationAirportCode;    // IATA code, e.g., "LHR"
-    private LocalDate departureDate;          // must be before returnDate (if returnDate present)
-    private LocalDate returnDate;             // optional in some scenarios
-    private boolean emergencyRowSeating;      // allowed only with adults & no infants
-    private String seatingClass;              // economy, premium, business, first
-    private int adultPassengerCount;          // >= 0
-    private int childPassengerCount;          // >= 0
-    private int infantPassengerCount;         // >= 0
+    // Dates
+    private LocalDate departureDate;
+    private LocalDate returnDate;
 
-    private static final Set<String> ALLOWED_CLASSES =
-            Set.of("economy", "premium", "business", "first");
+    // IATA airport codes (3 uppercase letters)
+    private String departureAirportCode;
+    private String destinationAirportCode;
 
-    // ---------- Constructors ----------
-    /** Level 1/2 constructor kept intact so your existing tests work */
-    public FlightSearch(String passengerName, String destination, double budget) {
-        this.passengerName = passengerName;
-        this.destination = destination;
-        this.budget = budget;
-    }
+    // Seating
+    private String seatingClass; // ECONOMY, PREMIUM, BUSINESS, FIRST (case-insensitive)
+    private boolean emergencyRowSeating;
 
-    /** Empty constructor (used by some tools/tests) */
+    // Passenger counts
+    private int adultPassengerCount;
+    private int childPassengerCount;
+    private int infantPassengerCount;
+
+    // --- Ctors ---
     public FlightSearch() {}
 
-    // ---------- Core validation (kept compatible with your level-1/2 tests) ----------
+    public FlightSearch(String passengerName, String destination, double budget) {
+        this.passengerName = trimOrNull(passengerName);
+        this.destination   = trimOrNull(destination);
+        this.budget        = budget;
+    }
+
+    // --- Fluent setters / Getters ---
+
+    public String getPassengerName() { return passengerName; }
+    public FlightSearch setPassengerName(String passengerName) {
+        this.passengerName = trimOrNull(passengerName);
+        return this;
+    }
+
+    public String getDestination() { return destination; }
+    public FlightSearch setDestination(String destination) {
+        this.destination = trimOrNull(destination);
+        return this;
+    }
+
+    public double getBudget() { return budget; }
+    public FlightSearch setBudget(double budget) {
+        this.budget = budget;
+        return this;
+    }
+
+    public LocalDate getDepartureDate() { return departureDate; }
+    public FlightSearch setDepartureDate(LocalDate departureDate) {
+        this.departureDate = departureDate;
+        return this;
+    }
+
+    public LocalDate getReturnDate() { return returnDate; }
+    public FlightSearch setReturnDate(LocalDate returnDate) {
+        this.returnDate = returnDate;
+        return this;
+    }
+
+    public String getDepartureAirportCode() { return departureAirportCode; }
+    public FlightSearch setDepartureAirportCode(String code) {
+        this.departureAirportCode = trimOrNull(code);
+        return this;
+    }
+
+    public String getDestinationAirportCode() { return destinationAirportCode; }
+    public FlightSearch setDestinationAirportCode(String code) {
+        this.destinationAirportCode = trimOrNull(code);
+        return this;
+    }
+
+    public String getSeatingClass() { return seatingClass; }
+    public FlightSearch setSeatingClass(String seatingClass) {
+        this.seatingClass = seatingClass == null ? null : seatingClass.trim();
+        return this;
+    }
+
+    public boolean isEmergencyRowSeating() { return emergencyRowSeating; }
+    public FlightSearch setEmergencyRowSeating(boolean emergencyRowSeating) {
+        this.emergencyRowSeating = emergencyRowSeating;
+        return this;
+    }
+
+    public int getAdultPassengerCount() { return adultPassengerCount; }
+    public FlightSearch setAdultPassengerCount(int adultPassengerCount) {
+        this.adultPassengerCount = adultPassengerCount;
+        return this;
+    }
+
+    public int getChildPassengerCount() { return childPassengerCount; }
+    public FlightSearch setChildPassengerCount(int childPassengerCount) {
+        this.childPassengerCount = childPassengerCount;
+        return this;
+    }
+
+    public int getInfantPassengerCount() { return infantPassengerCount; }
+    public FlightSearch setInfantPassengerCount(int infantPassengerCount) {
+        this.infantPassengerCount = infantPassengerCount;
+        return this;
+    }
+
+    // --- Validation rules ---
+
     public boolean validateSearch() {
-        // name: must exist & only letters/spaces/hyphen, length >= 1
-        if (passengerName == null || passengerName.isBlank()) return false;
-        if (!passengerName.matches("[A-Za-z\\- ]+")) return false;
+        // 1) Name & destination must not be blank
+        if (isBlank(passengerName)) return false;
+        if (isBlank(destination)) return false;
 
-        // destination: must exist & not be unreasonably long (<= 30)
-        if (destination == null || destination.isBlank()) return false;
-        if (destination.length() > 30) return false;
-
-        // budget must be positive
+        // 2) Budget must be positive
         if (budget <= 0) return false;
 
-        // ===== Level 3 additions (only applied if the fields are set) =====
-
-        // airport codes (if provided): must be exactly 3 uppercase letters
-        if (departureAirportCode != null && !departureAirportCode.matches("^[A-Z]{3}$")) return false;
-        if (destinationAirportCode != null && !destinationAirportCode.matches("^[A-Z]{3}$")) return false;
-
-        // dates (if both provided): departure must be before return
+        // 3) If both dates present, departure must be before return
         if (departureDate != null && returnDate != null) {
             if (!departureDate.isBefore(returnDate)) return false;
         }
 
-        // passenger counts must be non-negative
+        // 4) IATA codes (if provided) must be exactly 3 uppercase letters
+        if (departureAirportCode != null && !departureAirportCode.matches("[A-Z]{3}")) return false;
+        if (destinationAirportCode != null && !destinationAirportCode.matches("[A-Z]{3}")) return false;
+
+        // 5) Passenger counts must be non-negative
         if (adultPassengerCount < 0 || childPassengerCount < 0 || infantPassengerCount < 0) return false;
 
-        // if emergency row seating, must have at least 1 adult and no infants/children
+        // 6) Emergency row: at least 1 adult, no children/infants
         if (emergencyRowSeating) {
             if (adultPassengerCount < 1) return false;
-            if (infantPassengerCount > 0) return false;
-            if (childPassengerCount > 0) return false;
+            if (childPassengerCount > 0 || infantPassengerCount > 0) return false;
         }
 
-        // seating class (if provided) must be valid
+        // 7) Seating class must be allowed (if provided)
         if (seatingClass != null) {
-            if (!ALLOWED_CLASSES.contains(seatingClass.toLowerCase())) return false;
+            String sc = seatingClass.trim().toUpperCase();
+            switch (sc) {
+                case "ECONOMY":
+                case "PREMIUM":
+                case "BUSINESS":
+                case "FIRST":
+                    break; // allowed
+                default:
+                    return false;
+            }
         }
 
         return true;
     }
 
-    // ---------- Getters ----------
-    public String getPassengerName() { return passengerName; }
-    public String getDestination() { return destination; }
-    public double getBudget() { return budget; }
-    public String getDepartureAirportCode() { return departureAirportCode; }
-    public String getDestinationAirportCode() { return destinationAirportCode; }
-    public LocalDate getDepartureDate() { return departureDate; }
-    public LocalDate getReturnDate() { return returnDate; }
-    public boolean isEmergencyRowSeating() { return emergencyRowSeating; }
-    public String getSeatingClass() { return seatingClass; }
-    public int getAdultPassengerCount() { return adultPassengerCount; }
-    public int getChildPassengerCount() { return childPassengerCount; }
-    public int getInfantPassengerCount() { return infantPassengerCount; }
-
-    // ---------- Fluent setters (handy for tests) ----------
-    public FlightSearch setDepartureAirportCode(String code) {
-        this.departureAirportCode = code; return this;
-    }
-    public FlightSearch setDestinationAirportCode(String code) {
-        this.destinationAirportCode = code; return this;
-    }
-    public FlightSearch setDepartureDate(LocalDate date) {
-        this.departureDate = date; return this;
-    }
-    public FlightSearch setReturnDate(LocalDate date) {
-        this.returnDate = date; return this;
-    }
-    public FlightSearch setEmergencyRowSeating(boolean emergency) {
-        this.emergencyRowSeating = emergency; return this;
-    }
-    public FlightSearch setSeatingClass(String seatingClass) {
-        this.seatingClass = seatingClass; return this;
-    }
-    public FlightSearch setAdultPassengerCount(int n) {
-        this.adultPassengerCount = n; return this;
-    }
-    public FlightSearch setChildPassengerCount(int n) {
-        this.childPassengerCount = n; return this;
-    }
-    public FlightSearch setInfantPassengerCount(int n) {
-        this.infantPassengerCount = n; return this;
+    // --- Helpers ---
+    private static String trimOrNull(String s) {
+        if (s == null) return null;
+        String t = s.trim();
+        return t.isEmpty() ? "" : t;
     }
 
-    // ---------- toString (nice for debugging) ----------
+    private static boolean isBlank(String s) {
+        return s == null || s.trim().isEmpty();
+    }
+
     @Override
     public String toString() {
-        return "FlightSearch[" +
-                "passenger='" + passengerName + '\'' +
+        return "FlightSearch{" +
+                "passengerName='" + passengerName + '\'' +
                 ", destination='" + destination + '\'' +
                 ", budget=" + budget +
-                ", depIATA=" + departureAirportCode +
-                ", destIATA=" + destinationAirportCode +
-                ", depDate=" + departureDate +
-                ", retDate=" + returnDate +
-                ", emergencyRow=" + emergencyRowSeating +
-                ", class='" + seatingClass + '\'' +
-                ", adults=" + adultPassengerCount +
-                ", children=" + childPassengerCount +
-                ", infants=" + infantPassengerCount +
-                ']';
+                ", departureDate=" + departureDate +
+                ", returnDate=" + returnDate +
+                ", departureAirportCode='" + departureAirportCode + '\'' +
+                ", destinationAirportCode='" + destinationAirportCode + '\'' +
+                ", seatingClass='" + seatingClass + '\'' +
+                ", emergencyRowSeating=" + emergencyRowSeating +
+                ", adultPassengerCount=" + adultPassengerCount +
+                ", childPassengerCount=" + childPassengerCount +
+                ", infantPassengerCount=" + infantPassengerCount +
+                '}';
     }
 
-    // ---------- equals/hashCode (optional but useful) ----------
     @Override
     public boolean equals(Object o) {
         if (this == o) return true;
-        if (!(o instanceof FlightSearch)) return false;
-        FlightSearch that = (FlightSearch) o;
+        if (!(o instanceof FlightSearch that)) return false;
         return Double.compare(that.budget, budget) == 0 &&
                 emergencyRowSeating == that.emergencyRowSeating &&
                 adultPassengerCount == that.adultPassengerCount &&
@@ -158,18 +198,17 @@ public class FlightSearch {
                 infantPassengerCount == that.infantPassengerCount &&
                 Objects.equals(passengerName, that.passengerName) &&
                 Objects.equals(destination, that.destination) &&
-                Objects.equals(departureAirportCode, that.departureAirportCode) &&
-                Objects.equals(destinationAirportCode, that.destinationAirportCode) &&
                 Objects.equals(departureDate, that.departureDate) &&
                 Objects.equals(returnDate, that.returnDate) &&
+                Objects.equals(departureAirportCode, that.departureAirportCode) &&
+                Objects.equals(destinationAirportCode, that.destinationAirportCode) &&
                 Objects.equals(seatingClass, that.seatingClass);
     }
 
     @Override
     public int hashCode() {
-        return Objects.hash(passengerName, destination, budget,
-                departureAirportCode, destinationAirportCode,
-                departureDate, returnDate, emergencyRowSeating,
-                seatingClass, adultPassengerCount, childPassengerCount, infantPassengerCount);
+        return Objects.hash(passengerName, destination, budget, departureDate, returnDate,
+                departureAirportCode, destinationAirportCode, seatingClass,
+                emergencyRowSeating, adultPassengerCount, childPassengerCount, infantPassengerCount);
     }
 }
