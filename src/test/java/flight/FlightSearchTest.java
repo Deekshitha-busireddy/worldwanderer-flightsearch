@@ -1,106 +1,189 @@
+// src/test/java/flight/FlightSearchTest.java
 package flight;
 
 import org.junit.jupiter.api.Test;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 
 import static org.junit.jupiter.api.Assertions.*;
 
+/**
+ * Tests cover:
+ *  - each validation condition (including updated Condition 10)
+ *  - attributes only set when valid (remain unchanged when invalid)
+ *  - at least one "all-valid" case
+ */
 class FlightSearchTest {
 
-    @Test
-    void testValidInput() {
-        FlightSearch fs = new FlightSearch("Chris", "Tokyo", 900)
-                .setDepartureDate(LocalDate.now().plusDays(10))
-                .setReturnDate(LocalDate.now().plusDays(20))
-                .setDepartureAirportCode("JFK")
-                .setDestinationAirportCode("NRT")
-                .setAdultPassengerCount(1)
-                .setChildPassengerCount(0)
-                .setInfantPassengerCount(0)
-                .setSeatingClass("Economy")
-                .setEmergencyRowSeating(false);
+    private static final DateTimeFormatter DMY = DateTimeFormatter.ofPattern("dd/MM/uuuu");
 
-        assertTrue(fs.validateSearch());
+    private String d(int daysFromToday) {
+        return LocalDate.now().plusDays(daysFromToday).format(DMY);
+    }
+
+    private boolean runValid(FlightSearch fs) {
+        // A baseline-valid set of inputs
+        return fs.runFlightSearch(
+                d(5), "mel", false,
+                d(12), "pvg", "economy",
+                2, 2, 0
+        );
+    }
+
+    // Helper to assert attributes unchanged (all defaults) after a failed call
+    private void assertUnchanged(FlightSearch fs) {
+        assertNull(fs.getDepartureDate());
+        assertNull(fs.getDepartureAirportCode());
+        assertFalse(fs.isEmergencyRowSeating());
+        assertNull(fs.getReturnDate());
+        assertNull(fs.getDestinationAirportCode());
+        assertNull(fs.getSeatingClass());
+        assertEquals(0, fs.getAdultPassengerCount());
+        assertEquals(0, fs.getChildPassengerCount());
+        assertEquals(0, fs.getInfantPassengerCount());
     }
 
     @Test
-    void testEmptyDestination() {
-        FlightSearch fs = new FlightSearch("Chris", "", 500);
-        assertFalse(fs.validateSearch());
+    void testAllValid_setsAttributesAndReturnsTrue() {
+        FlightSearch fs = new FlightSearch();
+        boolean ok = fs.runFlightSearch(
+                d(3), "syd", false,
+                d(10), "cdg", "economy",
+                1, 0, 0
+        );
+        assertTrue(ok);
+        assertEquals(d(3), fs.getDepartureDate());
+        assertEquals("syd", fs.getDepartureAirportCode());
+        assertEquals(d(10), fs.getReturnDate());
+        assertEquals("cdg", fs.getDestinationAirportCode());
+        assertEquals("economy", fs.getSeatingClass());
+        assertEquals(1, fs.getAdultPassengerCount());
+        assertEquals(0, fs.getChildPassengerCount());
+        assertEquals(0, fs.getInfantPassengerCount());
     }
 
     @Test
-    void testEmptyName() {
-        FlightSearch fs = new FlightSearch("", "Berlin", 400);
-        assertFalse(fs.validateSearch());
+    void testTotalPassengersMustBeWithin1to9() {
+        FlightSearch fs = new FlightSearch();
+
+        // 0 passengers -> invalid
+        boolean ok = fs.runFlightSearch(d(2), "mel", false, d(5), "pvg", "economy",
+                0, 0, 0);
+        assertFalse(ok); assertUnchanged(fs);
+
+        // 10 passengers -> invalid
+        ok = fs.runFlightSearch(d(2), "mel", false, d(5), "pvg", "economy",
+                9, 1, 0);
+        assertFalse(ok); assertUnchanged(fs);
     }
 
     @Test
-    void testInvalidBudget() {
-        FlightSearch fs = new FlightSearch("Chris", "Berlin", -1);
-        assertFalse(fs.validateSearch());
+    void testChildrenNotInEmergencyOrFirst() {
+        FlightSearch fs = new FlightSearch();
+        // children + emergency -> invalid
+        boolean ok = fs.runFlightSearch(d(3), "mel", true, d(7), "pvg", "economy",
+                1, 1, 0);
+        assertFalse(ok); assertUnchanged(fs);
+
+        // children + first class -> invalid
+        ok = fs.runFlightSearch(d(3), "mel", false, d(7), "pvg", "first",
+                1, 1, 0);
+        assertFalse(ok); assertUnchanged(fs);
     }
 
     @Test
-    void testPassengerCountsNonNegative() {
-        FlightSearch fs = new FlightSearch("A", "B", 100)
-                .setAdultPassengerCount(-1);
-        assertFalse(fs.validateSearch());
+    void testInfantsNotInEmergencyOrBusiness() {
+        FlightSearch fs = new FlightSearch();
+        // infants + emergency -> invalid
+        boolean ok = fs.runFlightSearch(d(3), "mel", true, d(7), "pvg", "economy",
+                1, 0, 1);
+        assertFalse(ok); assertUnchanged(fs);
+
+        // infants + business -> invalid
+        ok = fs.runFlightSearch(d(3), "mel", false, d(7), "pvg", "business",
+                1, 0, 1);
+        assertFalse(ok); assertUnchanged(fs);
     }
 
     @Test
-    void testEmergencyRowRequiresAdultsNoChildrenNoInfants() {
-        FlightSearch fs = new FlightSearch("A", "B", 100)
-                .setEmergencyRowSeating(true)
-                .setAdultPassengerCount(1)
-                .setChildPassengerCount(0)
-                .setInfantPassengerCount(0);
-        assertTrue(fs.validateSearch()); // valid case
+    void testChildrenAtMostTwoPerAdult() {
+        FlightSearch fs = new FlightSearch();
+        // 3 children with 1 adult -> invalid
+        boolean ok = fs.runFlightSearch(d(3), "mel", false, d(10), "pvg", "economy",
+                1, 3, 0);
+        assertFalse(ok); assertUnchanged(fs);
     }
 
     @Test
-    void testIataCodesMustBe3UppercaseLetters() {
-        FlightSearch fs = new FlightSearch("A", "B", 100)
-                .setDepartureAirportCode("JFK")
-                .setDestinationAirportCode("NRT");
-        assertTrue(fs.validateSearch());
-
-        fs.setDestinationAirportCode("Nar"); // invalid (not uppercase)
-        assertFalse(fs.validateSearch());
+    void testInfantsAtMostOnePerAdult() {
+        FlightSearch fs = new FlightSearch();
+        // 2 infants with 1 adult -> invalid
+        boolean ok = fs.runFlightSearch(d(3), "mel", false, d(10), "pvg", "economy",
+                1, 0, 2);
+        assertFalse(ok); assertUnchanged(fs);
     }
 
     @Test
-    void testValidSeatingClassValues() {
-        String[] allowed = {"economy", "PREMIUM", "Business", "FIRST"};
-        for (String sc : allowed) {
-            FlightSearch fs = new FlightSearch("A", "B", 100)
-                    .setSeatingClass(sc);
-            assertTrue(fs.validateSearch(), "Should allow: " + sc);
-        }
-
-        FlightSearch bad = new FlightSearch("A", "B", 100)
-                .setSeatingClass("DELUXE");
-        assertFalse(bad.validateSearch());
+    void testDepartureNotInPast() {
+        FlightSearch fs = new FlightSearch();
+        String yesterday = LocalDate.now().minusDays(1).format(DMY);
+        boolean ok = fs.runFlightSearch(yesterday, "mel", false, d(5), "pvg", "economy",
+                1, 0, 0);
+        assertFalse(ok); assertUnchanged(fs);
     }
 
     @Test
-    void testDepartureBeforeReturnDate() {
-        FlightSearch fs = new FlightSearch("A", "B", 100)
-                .setDepartureDate(LocalDate.now().plusDays(1))
-                .setReturnDate(LocalDate.now().plusDays(5));
-        assertTrue(fs.validateSearch());
+    void testStrictDateFormat() {
+        FlightSearch fs = new FlightSearch();
+        // invalid combination (29 Feb 2026 – 2026 is not leap year)
+        boolean ok = fs.runFlightSearch("29/02/2026", "mel", false, d(10), "pvg", "economy",
+                1, 0, 0);
+        assertFalse(ok); assertUnchanged(fs);
     }
 
     @Test
-    void testInvalidBudgetWithEverythingElseValid() {
-        FlightSearch fs = new FlightSearch("Chris", "Tokyo", 0) // not positive
-                .setDepartureAirportCode("JFK")
-                .setDestinationAirportCode("NRT")
-                .setDepartureDate(LocalDate.now().plusDays(7))
-                .setReturnDate(LocalDate.now().plusDays(9))
-                .setAdultPassengerCount(1)
-                .setSeatingClass("ECONOMY");
-        assertFalse(fs.validateSearch());
+    void testReturnNotBeforeDeparture() {
+        FlightSearch fs = new FlightSearch();
+        boolean ok = fs.runFlightSearch(d(10), "mel", false, d(5), "pvg", "economy",
+                1, 0, 0);
+        assertFalse(ok); assertUnchanged(fs);
+    }
+
+    @Test
+    void testSeatingClassMustBeValid() {
+        FlightSearch fs = new FlightSearch();
+        boolean ok = fs.runFlightSearch(d(3), "mel", false, d(10), "pvg", "econom",
+                1, 0, 0);
+        assertFalse(ok); assertUnchanged(fs);
+    }
+
+    @Test
+    void testEmergencyRowOnlyForEconomy() {
+        FlightSearch fs = new FlightSearch();
+        boolean ok = fs.runFlightSearch(d(3), "mel", true, d(10), "pvg", "business",
+                1, 0, 0);
+        assertFalse(ok); assertUnchanged(fs);
+    }
+
+    @Test
+    void testAirportsAllowedAndNotSame() {
+        FlightSearch fs = new FlightSearch();
+
+        // invalid code
+        boolean ok = fs.runFlightSearch(d(3), "xxx", false, d(10), "pvg", "economy",
+                1, 0, 0);
+        assertFalse(ok); assertUnchanged(fs);
+
+        // same origin and destination
+        ok = fs.runFlightSearch(d(3), "mel", false, d(10), "mel", "economy",
+                1, 0, 0);
+        assertFalse(ok); assertUnchanged(fs);
+    }
+
+    @Test
+    void testBaselineValidHelper() {
+        FlightSearch fs = new FlightSearch();
+        assertTrue(runValid(fs), "Baseline valid set should pass");
     }
 }
